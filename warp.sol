@@ -78,8 +78,8 @@ contract WjWrap {
     IERC20 public hunter;
     IERC20 public usdt;
 
-    constructor(IERC20 _wj) public {
-        hunter = _wj;
+    constructor(IERC20 _hunter) public {
+        hunter = _hunter;
         usdt = IERC20(0x55d398326f99059fF775485246999027B3197955);
     }
 

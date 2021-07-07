@@ -368,7 +368,7 @@ interface IUniswapV2Router02 is IUniswapV2Router01 {
     ) external;
 }
 
-contract WJFomo {
+contract HTRFomo {
     using SafeMath for uint256;
 
     address public candidate;
@@ -383,8 +383,8 @@ contract WJFomo {
 
     event Reward(address user, uint256 amount);
 
-    constructor (IERC20 _wj) public {
-        hunter = _wj;
+    constructor (IERC20 _hunter) public {
+        hunter = _hunter;
         uniswapV2Router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
         candidate = msg.sender;
         lastTransfer = block.timestamp;

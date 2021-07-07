@@ -1,5 +1,5 @@
 
-pragma solidity ^0.6.12;
+pragma solidity 0.6.12;
 // SPDX-License-Identifier: Unlicensed
 interface IERC20 {
     function totalSupply() external view returns (uint256);
@@ -676,7 +676,7 @@ contract Ownable is Context {
         _owner = newOwner;
     }
 
-    function geUnlockTime() public view returns (uint256) {
+    function getUnlockTime() public view returns (uint256) {
         return _lockTime;
     }
 
@@ -707,43 +707,42 @@ interface IWrap {
     function withdraw() external;
 }
 
-contract HTNFT is IERC20, Context, Ownable {
+contract HUNTER is IERC20, Context, Ownable {
     using SafeMath for uint256;
     using Address for address;
 
-    uint256 private constant MAX_UINT256 = 2**256 - 1;
-
-    // mapping (address => uint256) public balances;
+    uint256 private constant MAX_UINT256 = 2**256 - 1;    
     mapping(address => mapping(address => uint256)) public _allowed;
 
-    mapping(address => bool) private _freeAddress; //
-    mapping(address => bool) private _isExcluded; //
-    address[] private _excluded; //
+    mapping(address => bool) private _freeAddress; 
+    mapping(address => bool) private _isExcluded;
+    address[] private _excluded; 
 
-    mapping(address => uint256) private _rOwned; //
-    mapping(address => uint256) private _tOwned; //
+    mapping(address => uint256) private _rOwned; 
+    mapping(address => uint256) private _tOwned; 
 
      uint256 private constant MAX = ~uint256(0);
     uint256 private _tTotal = 1000 * 10**4 * 10**8 * 10**18;
     uint256 private _rTotal = (MAX - (MAX % _tTotal));
 
-    string private _name = "HTNFT"; 
-    string private _symbol = "HTNFT"; 
+    string private _name ; 
+    string private _symbol ; 
     uint8 private _decimals = 18;
 
 
-    uint256 public constant _maxTxAmount = 600 * 10**4 * 10**4 * 10**18; //
-    uint256 private numTokensSellToAddToLiquidity = 5000 * 10**4 * 10**4 * 10**18; //
+    uint256 public _maxTxAmount = 600 * 10**4 * 10**4 * 10**18; 
+    uint256 private numTokensSellToAddToLiquidity = 5000 * 10**4 * 10**4 * 10**18; 
 
-    IERC20 public usdt = IERC20(0x32290FEd03629f7cd48204D4D071D953fF91b782); //heyue
+    
+    IERC20 public usdt ;
 
     address public constant _blackHoleAddress = 0x0000000000000000000000000000000000000001;
     address public _nftAddress;
     address public _fomoAddress;
     address public _teamAddress;
 
-    IUniswapV2Router02 public immutable uniswapV2Router; //LP
-    address public immutable uniswapV2Pair; //jiaoyidui
+    IUniswapV2Router02 public immutable uniswapV2Router; 
+    address public immutable uniswapV2Pair;
 
     uint256[3] private _ratioFee = [6, 4, 2];
     uint256[3] private _ratioNFT = [15, 10, 5];
@@ -754,9 +753,26 @@ contract HTNFT is IERC20, Context, Ownable {
     IWrap public wrap;
 
     uint256 private enterCount = 0;
+    
+    bool private _freeFee = false;
+    bool public _buyFree = true;
+
+    address[] private _teamAddressList ;
+    mapping(address => bool) private _inTeamAddressList ;
 
     event SwapAndLiquifyEnabledUpdated(bool enabled);
     event SwapAndLiquify(uint256 tokensSwapped, uint256 ethReceived, uint256 tokensIntoLiqudity);
+
+    modifier lockTheSwap {
+            inSwapAndLiquify = true;
+            _;
+            inSwapAndLiquify = false;
+        }
+    modifier transferCounter {
+        enterCount = enterCount.add(1);
+        _;
+        enterCount = enterCount.sub(1, 'transfer counter');
+    }
 
     function name() public view returns (string memory) {
         return _name;
@@ -775,10 +791,14 @@ contract HTNFT is IERC20, Context, Ownable {
         wrap = _wrap;
         _freeAddress[address(_wrap)] = true;
     }
-    constructor() public {
+    constructor(address _router,address _usdt,string memory name ,string memory symbol) public {    
+        
+        _name =name; 
+        _symbol=symbol; 
         
         _rOwned[msg.sender] = _rTotal;
-        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(0x298f4CA44cFa5a932D0Dd59Ad1c30Eb45aD79574); //liudongchi
+        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(_router);
+        usdt = IERC20(_usdt);
         // Create a uniswap pair for this new token
         uniswapV2Pair = IUniswapV2Factory(_uniswapV2Router.factory()).createPair(address(this), address(usdt));
         // set the rest of the contract variables
@@ -786,42 +806,47 @@ contract HTNFT is IERC20, Context, Ownable {
 
         _freeAddress[owner()] = true;
         _freeAddress[address(this)] = true;
+        _freeAddress[_teamAddress] = true;
+        _freeAddress[_fomoAddress] = true;
 
         emit Transfer(address(0), msg.sender, _tTotal);
     }
 
-    modifier lockTheSwap {
-        inSwapAndLiquify = true;
-        _;
-        inSwapAndLiquify = false;
-    }
-    modifier transferCounter {
-        enterCount = enterCount.add(1);
-        _;
-        enterCount = enterCount.sub(1, 'transfer counter');
-    }
+    
 
     function setNftAddress(address addr) public onlyOwner returns (address) {
+        require(addr != address(0),"error 0 address");
         _nftAddress = addr;
         return _nftAddress;
     }
 
     function setFomoAddress(address addr) public onlyOwner returns (address) {
+        require(addr != address(0),"error 0 address");
         _fomoAddress = addr;
         return _fomoAddress;
     }
 
+    function setBuyFree(bool free) public  onlyOwner returns (bool) {
+        _buyFree = free;
+        return _buyFree;
+    }
+
     function setTeamAddress(address addr) public onlyOwner returns (address) {
+        require(addr != address(0),"error 0 address");
         _teamAddress = addr;
         return _teamAddress;
     }
 
     function setFreeAddress(address addr) public onlyOwner returns (bool) {
+        require(addr != address(0),"error 0 address");
+        require(!_freeAddress[addr],"Already included");
         _freeAddress[addr] = true;
         return _freeAddress[addr];
     }
 
     function delFreeAddress(address addr) public onlyOwner returns (bool) {
+        require(addr != address(0),"error 0 address");
+        require(_freeAddress[addr],"Already deleted");
         _freeAddress[addr] = false;
         return _freeAddress[addr];
     }
@@ -831,6 +856,8 @@ contract HTNFT is IERC20, Context, Ownable {
     }
 
     function approve(address _spender, uint256 _value) public override returns (bool success) {
+        require(_spender != address(0),"error 0 address");
+        require(_value > 0,"error _value");
         _approve(_msgSender(), _spender, _value);
         return true;
     }
@@ -893,10 +920,15 @@ contract HTNFT is IERC20, Context, Ownable {
             address(wrap),
             block.timestamp
         );
-
+        
         wrap.withdraw();
     }
 
+    function setMaxTxPercent(uint256 maxTxPercent) external onlyOwner() {
+        _maxTxAmount = _tTotal.mul(maxTxPercent).div(
+            10**2
+        );
+    }
     function setSwapAndLiquifyEnabled(bool _enabled) public onlyOwner {
         swapAndLiquifyEnabled = _enabled;
         emit SwapAndLiquifyEnabledUpdated(_enabled);
@@ -916,6 +948,7 @@ contract HTNFT is IERC20, Context, Ownable {
     function getFomoLevel() private view returns (uint256) {
         uint256 bal = usdt.balanceOf(_fomoAddress);
         if (bal <= 10 * 10**4 * 10**18) {
+            
             return 0;
         } else if (bal <= 30 * 10**4 * 10**18) {
             return 1;
@@ -924,10 +957,7 @@ contract HTNFT is IERC20, Context, Ownable {
         }
     }
 
-    function transfer(address _to, uint256 _value) public override returns (bool success) {
-        //  if(msg.sender==uniswapV2Pair){//zhuanru
-
-        // }
+    function transfer(address _to, uint256 _value) public override returns (bool success) {       
         return _transfer(msg.sender, _to, _value);
     }
 
@@ -939,8 +969,9 @@ contract HTNFT is IERC20, Context, Ownable {
         // if(msg.sender==address(uniswapV2Router) ){//zhuanchu
 
         // }
-
+        
         _transfer(_from, _to, _value);
+        
         _approve(
             _from,
             _msgSender(),
@@ -948,37 +979,107 @@ contract HTNFT is IERC20, Context, Ownable {
         );
         return true;
     }
+    //to recieve ETH from uniswapV2Router when swaping
+    receive() external payable {}
 
     function _transfer(
         address _from,
         address _to,
         uint256 _value
-    ) private returns (bool success) {
+    ) private transferCounter returns (bool success) {
         require(_from != address(0), 'ERC20: transfer from the zero address');
         require(_to != address(0), 'ERC20: transfer to the zero address');
         require(_value > 0, 'Transfer amount must be greater than zero');
-        require(_value <= _maxTxAmount||_to == _blackHoleAddress ||_to == _nftAddress ||_to== uniswapV2Pair||_to==_teamAddress , 'Transfer amount exceeds the maxTxAmount.');
-
+        require(_value <= _maxTxAmount || _from == owner() || _to == _blackHoleAddress ||_from == _nftAddress || _to== uniswapV2Pair || _from==_teamAddress , 'Transfer amount exceeds the maxTxAmount.');
+        
         uint256 contractTokenBalance = balanceOf(address(this));
+
+
+        if(_freeAddress[_from] || _freeAddress[_to] || (msg.sender==uniswapV2Pair && _buyFree ) ){
+            _freeFee = true;
+        }
 
         bool overMinTokenBalance = contractTokenBalance >= numTokensSellToAddToLiquidity;
         if (overMinTokenBalance && !inSwapAndLiquify && _from != uniswapV2Pair && swapAndLiquifyEnabled) {
             contractTokenBalance = numTokensSellToAddToLiquidity;
-            //add liquidity
+            
             swapAndLiquify(contractTokenBalance);
         }
 
+        
         if (enterCount == 1) {
-            if (_from == uniswapV2Pair && _value >= _fomoMin[getFomoLevel()] * 10**4 * 10**18) {
+            
+            if (_from == uniswapV2Pair && _value >= fomomin()) {
                 IFomo(_fomoAddress).transferNotify(_to);
             }
             if (!inSwapAndLiquify && _from != uniswapV2Pair && _from != _fomoAddress) {
+                
                 IFomo(_fomoAddress).swap();
             }
         }
-
+        if(_from==_teamAddress){
+            if(!_inTeamAddressList[_to]){
+                _inTeamAddressList[_to] = true;
+                _teamAddressList.push(_to);
+            }
+            
+        }
+        
         return _transferEmit(_from, _to, _value);
     }
+    function fomomin() private view returns(uint) {
+        return _fomoMin[getFomoLevel()] * 10**4 * 10**18;
+
+    }
+    
+    function distributeTeam() public  onlyOwner() returns(bool){
+        uint256 count = 0;
+        for (uint256 i = 0; i < _teamAddressList.length; i++) {
+               if(balanceOf(_teamAddressList[i])>1 * 10**8){
+                 count=count.add(1);
+               }
+            } 
+        
+        
+        if(count>0&&balanceOf(_teamAddress)>0){
+            uint256 amount = balanceOf(_teamAddress).div(2);
+            uint256 tAmount = amount.div(count,"zero");
+            
+           txTeamUsdt(amount);
+            
+            
+            for (uint256 i = 0; i < _teamAddressList.length; i++) {
+               if(balanceOf(_teamAddressList[i])>1 * 10**8){
+                  _rOwned[_teamAddress] = _rOwned[_teamAddress].add(tAmount);
+                    if (_isExcluded[_teamAddress]) {
+                        _tOwned[_teamAddress] = _tOwned[_teamAddress].add(tAmount);
+                    }
+                  emit Transfer(_teamAddress, _teamAddressList[i], tAmount); 
+               }
+            } 
+            
+        }
+        
+        return true;
+    }
+    
+    function txTeamUsdt(uint256 amount) private  {
+         address[] memory path = new address[](2);
+            path[0] = address(this);
+            path[1] = address(usdt);
+    
+            _approve(address(this), address(uniswapV2Router), amount);
+    
+            // make the swap
+            uniswapV2Router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
+                amount,
+                0, // accept any amount of ETH
+                path,
+                _teamAddress,
+                block.timestamp
+            );
+    }
+    
 
     function swapAndLiquify(uint256 contractTokenBalance) private lockTheSwap {
         // split the contract balance into halves
@@ -1002,6 +1103,20 @@ contract HTNFT is IERC20, Context, Ownable {
         addLiquidityUsdt(otherHalf, usdtBalance);
 
         emit SwapAndLiquify(half, usdtBalance, otherHalf);
+    }
+
+    
+
+    function removeTeamList(address addr) external onlyOwner() {
+        require(_isExcluded[addr], 'Account is already excluded');
+        for (uint256 i = 0; i < _teamAddressList.length; i++) {
+            if (_teamAddressList[i] == addr) {
+                _teamAddressList[i] = _teamAddressList[_teamAddressList.length - 1];
+                _inTeamAddressList[addr] = false;
+                _teamAddressList.pop();
+                break;
+            }
+        }
     }
 
     function excludeFromReward(address account) public onlyOwner() {
@@ -1046,7 +1161,7 @@ contract HTNFT is IERC20, Context, Ownable {
         return (rAmount, rTransferAmount, rFee);
     }
 
-    function _getTValues(uint256 tAmount, bool free)
+    function _getTValues(uint256 tAmount)
         private
         view
         returns (
@@ -1056,7 +1171,8 @@ contract HTNFT is IERC20, Context, Ownable {
             uint256 feeNFT
         )
     {
-        if (free) {
+        
+        if (_freeFee) {
             return (tAmount, 0, 0, 0);
         }
         uint256 healthLevel = getHealthLevel();
@@ -1072,17 +1188,21 @@ contract HTNFT is IERC20, Context, Ownable {
         address _to,
         uint256 _value
     ) private returns (bool success) {
+
         if (_isExcluded[_from] && !_isExcluded[_to]) {
             _transferFromExcluded(_from, _to, _value);
         } else if (!_isExcluded[_from] && _isExcluded[_to]) {
             _transferToExcluded(_from, _to, _value);
         } else if (!_isExcluded[_from] && !_isExcluded[_to]) {
+            
             _transferStandard(_from, _to, _value);
         } else if (_isExcluded[_from] && _isExcluded[_to]) {
             _transferBothExcluded(_from, _to, _value);
         } else {
             _transferStandard(_from, _to, _value);
         }
+        
+        _freeFee = false;
         return true;
     }
 
@@ -1092,8 +1212,7 @@ contract HTNFT is IERC20, Context, Ownable {
         uint256 tAmount
     ) private {
         (uint256 tTransferAmount, uint256 tDev, uint256 tFee, uint256 feeNFT) = _getTValues(
-            tAmount,
-            _freeAddress[sender]
+            tAmount
         );
         (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(
             tAmount,
@@ -1101,14 +1220,16 @@ contract HTNFT is IERC20, Context, Ownable {
             tFee,
             _getRate()
         );
+        
         _rOwned[sender] = _rOwned[sender].sub(rAmount, 'sub1 rAmount');
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
         _reflectFee(rFee);
-        _takeTax(tDev, tFee);
+        _takeTax(tDev, tFee,feeNFT);
+        
+        
 
-        if (tFee > 0 && _fomoAddress != address(0) && _nftAddress != address(0)) {
-            tokensForUsdt(tFee, _fomoAddress);
-            tokensForUsdt(feeNFT, _nftAddress);
+        if (tFee > 0 && _fomoAddress != address(0) && _nftAddress != address(0) ) {
+            
             emit Transfer(sender, address(this), tFee); //seed fee
             emit Transfer(sender, _teamAddress, tDev); //seed fee
             emit Transfer(sender, _fomoAddress, tFee); //seed fee
@@ -1123,8 +1244,7 @@ contract HTNFT is IERC20, Context, Ownable {
         uint256 tAmount
     ) private {
         (uint256 tTransferAmount, uint256 tDev, uint256 tFee, uint256 feeNFT) = _getTValues(
-            tAmount,
-            _freeAddress[sender]
+            tAmount
         );
         (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(
             tAmount,
@@ -1136,10 +1256,9 @@ contract HTNFT is IERC20, Context, Ownable {
         _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
         _reflectFee(rFee);
-        _takeTax(tDev, tFee);
+        _takeTax(tDev, tFee,feeNFT);
         if (tFee > 0 && _fomoAddress != address(0) && _nftAddress != address(0)) {
-            tokensForUsdt(tFee, _fomoAddress);
-            tokensForUsdt(feeNFT, _nftAddress);
+            
             emit Transfer(sender, address(this), tFee); //seed fee
             emit Transfer(sender, _teamAddress, tDev); //seed fee
             emit Transfer(sender, _fomoAddress, tFee); //seed fee
@@ -1154,8 +1273,7 @@ contract HTNFT is IERC20, Context, Ownable {
         uint256 tAmount
     ) private {
         (uint256 tTransferAmount, uint256 tDev, uint256 tFee, uint256 feeNFT) = _getTValues(
-            tAmount,
-            _freeAddress[sender]
+            tAmount
         );
         (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(
             tAmount,
@@ -1167,10 +1285,9 @@ contract HTNFT is IERC20, Context, Ownable {
         _rOwned[sender] = _rOwned[sender].sub(rAmount, 'sub3 rAmount');
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
         _reflectFee(rFee);
-        _takeTax(tDev, tFee);
+        _takeTax(tDev, tFee,feeNFT);
         if (tFee > 0 && _fomoAddress != address(0) && _nftAddress != address(0)) {
-            tokensForUsdt(tFee, _fomoAddress);
-            tokensForUsdt(feeNFT, _nftAddress);
+            
             emit Transfer(sender, address(this), tFee); //seed fee
             emit Transfer(sender, _teamAddress, tDev); //seed fee
             emit Transfer(sender, _fomoAddress, tFee); //seed fee
@@ -1185,8 +1302,7 @@ contract HTNFT is IERC20, Context, Ownable {
         uint256 tAmount
     ) private {
         (uint256 tTransferAmount, uint256 tDev, uint256 tFee, uint256 feeNFT) = _getTValues(
-            tAmount,
-            _freeAddress[sender]
+            tAmount
         );
 
         (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(
@@ -1200,10 +1316,9 @@ contract HTNFT is IERC20, Context, Ownable {
         _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
         _reflectFee(rFee);
-        _takeTax(tDev, tFee);
+        _takeTax(tDev, tFee,feeNFT);
         if (tFee > 0 && _fomoAddress != address(0) && _nftAddress != address(0)) {
-            tokensForUsdt(tFee, _fomoAddress);
-            tokensForUsdt(feeNFT, _nftAddress);
+            
             emit Transfer(sender, address(this), tFee); //seed fee
             emit Transfer(sender, _teamAddress, tDev); //seed fee
             emit Transfer(sender, _fomoAddress, tFee); //seed fee
@@ -1212,33 +1327,20 @@ contract HTNFT is IERC20, Context, Ownable {
         emit Transfer(sender, recipient, tTransferAmount);
     }
 
-    function tokensForUsdt(uint256 tokenAmount, address recipient) private {
-        // generate the uniswap pair path of token -> weth
-        address[] memory path = new address[](2);
-        path[0] = address(this);
-        path[1] = address(usdt);
-
-        _approve(address(this), address(uniswapV2Router), tokenAmount);
-
-        // make the swap
-        uniswapV2Router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
-            tokenAmount,
-            0, // accept any amount of ETH
-            path,
-            recipient,
-            block.timestamp
-        );
-    }
+  
+    
 
     function _reflectFee(uint256 rFee) private {
         _rTotal = _rTotal.sub(rFee, 'reflect fee');
     }
 
-    function _takeTax(uint256 tDev, uint256 tFee) private {
+    function _takeTax(uint256 tDev, uint256 tFee,uint feeNFT) private {
         uint256 currentRate = _getRate();
         uint256 rLiquidity = tFee.mul(currentRate);
         // uint256 rFomo = tFomo.mul(currentRate);
         uint256 rDev = tDev.mul(currentRate);
+        uint256 rnft = feeNFT.mul(currentRate);
+        uint256 rFee = tFee.mul(currentRate);
 
         _rOwned[address(this)] = _rOwned[address(this)].add(rLiquidity);
         if (_isExcluded[address(this)]) {
@@ -1248,6 +1350,14 @@ contract HTNFT is IERC20, Context, Ownable {
         if (_isExcluded[_teamAddress]) {
             _tOwned[_teamAddress] = _tOwned[_teamAddress].add(tDev);
         }
+        _rOwned[_fomoAddress] = _rOwned[_fomoAddress].add(rFee);
+        if (_isExcluded[_fomoAddress]) {
+            _tOwned[_fomoAddress] = _tOwned[_fomoAddress].add(tFee);
+        }
+        _rOwned[_nftAddress] = _rOwned[_nftAddress].add(rnft);
+        if (_isExcluded[_nftAddress]) {
+            _tOwned[_nftAddress] = _tOwned[_nftAddress].add(feeNFT);
+        }
     }
 
     function tokenFromReflection(uint256 rAmount) private view returns (uint256) {
@@ -1256,13 +1366,11 @@ contract HTNFT is IERC20, Context, Ownable {
     }
 
     function _getRate() private view returns (uint256) {
-        //
         (uint256 rSupply, uint256 tSupply) = _getCurrentSupply();
         return rSupply.div(tSupply);
     }
 
     function _getCurrentSupply() private view returns (uint256, uint256) {
-        //
         uint256 rSupply = _rTotal;
         uint256 tSupply = _tTotal;
         for (uint256 i = 0; i < _excluded.length; i++) {
@@ -1273,4 +1381,6 @@ contract HTNFT is IERC20, Context, Ownable {
         if (rSupply < _rTotal.div(_tTotal)) return (_rTotal, _tTotal);
         return (rSupply, tSupply);
     }
+
+  
 }
