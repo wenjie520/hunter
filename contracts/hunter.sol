@@ -1,6 +1,6 @@
-
-pragma solidity 0.6.12;
 // SPDX-License-Identifier: Unlicensed
+pragma solidity 0.6.12;
+
 interface IERC20 {
     function totalSupply() external view returns (uint256);
 
@@ -740,6 +740,7 @@ contract HUNTER is IERC20, Context, Ownable {
     address public _nftAddress;
     address public _fomoAddress;
     address public _teamAddress;
+    address public _whiteListAddress;
 
     IUniswapV2Router02 public immutable uniswapV2Router; 
     address public immutable uniswapV2Pair;
@@ -757,8 +758,6 @@ contract HUNTER is IERC20, Context, Ownable {
     bool private _freeFee = false;
     bool public _buyFree = true;
 
-    address[] private _teamAddressList ;
-    mapping(address => bool) private _inTeamAddressList ;
 
     event SwapAndLiquifyEnabledUpdated(bool enabled);
     event SwapAndLiquify(uint256 tokensSwapped, uint256 ethReceived, uint256 tokensIntoLiqudity);
@@ -808,6 +807,7 @@ contract HUNTER is IERC20, Context, Ownable {
         _freeAddress[address(this)] = true;
         _freeAddress[_teamAddress] = true;
         _freeAddress[_fomoAddress] = true;
+        _freeAddress[_whiteListAddress] = true;
 
         emit Transfer(address(0), msg.sender, _tTotal);
     }
@@ -830,12 +830,19 @@ contract HUNTER is IERC20, Context, Ownable {
         _buyFree = free;
         return _buyFree;
     }
-
+    
     function setTeamAddress(address addr) public onlyOwner returns (address) {
         require(addr != address(0),"error 0 address");
         _teamAddress = addr;
         return _teamAddress;
     }
+    
+    function setWhiteListAddress(address addr) public onlyOwner returns (address) {
+        require(addr != address(0),"error 0 address");
+        _whiteListAddress = addr;
+        return _whiteListAddress;
+    }
+    
 
     function setFreeAddress(address addr) public onlyOwner returns (bool) {
         require(addr != address(0),"error 0 address");
@@ -990,7 +997,7 @@ contract HUNTER is IERC20, Context, Ownable {
         require(_from != address(0), 'ERC20: transfer from the zero address');
         require(_to != address(0), 'ERC20: transfer to the zero address');
         require(_value > 0, 'Transfer amount must be greater than zero');
-        require(_value <= _maxTxAmount || _from == owner() || _to == _blackHoleAddress ||_from == _nftAddress || _to== uniswapV2Pair || _from==_teamAddress , 'Transfer amount exceeds the maxTxAmount.');
+        require(_value <= _maxTxAmount || _from == owner() || _to == _blackHoleAddress ||_from == _nftAddress || _to== uniswapV2Pair || _from==_teamAddress || _from==_whiteListAddress, 'Transfer amount exceeds the maxTxAmount.');
         
         uint256 contractTokenBalance = balanceOf(address(this));
 
@@ -1004,6 +1011,7 @@ contract HUNTER is IERC20, Context, Ownable {
             contractTokenBalance = numTokensSellToAddToLiquidity;
             
             swapAndLiquify(contractTokenBalance);
+            
         }
 
         
@@ -1017,13 +1025,7 @@ contract HUNTER is IERC20, Context, Ownable {
                 IFomo(_fomoAddress).swap();
             }
         }
-        if(_from==_teamAddress){
-            if(!_inTeamAddressList[_to]){
-                _inTeamAddressList[_to] = true;
-                _teamAddressList.push(_to);
-            }
-            
-        }
+       
         
         return _transferEmit(_from, _to, _value);
     }
@@ -1032,53 +1034,6 @@ contract HUNTER is IERC20, Context, Ownable {
 
     }
     
-    function distributeTeam() public  onlyOwner() returns(bool){
-        uint256 count = 0;
-        for (uint256 i = 0; i < _teamAddressList.length; i++) {
-               if(balanceOf(_teamAddressList[i])>1 * 10**8){
-                 count=count.add(1);
-               }
-            } 
-        
-        
-        if(count>0&&balanceOf(_teamAddress)>0){
-            uint256 amount = balanceOf(_teamAddress).div(2);
-            uint256 tAmount = amount.div(count,"zero");
-            
-           txTeamUsdt(amount);
-            
-            
-            for (uint256 i = 0; i < _teamAddressList.length; i++) {
-               if(balanceOf(_teamAddressList[i])>1 * 10**8){
-                  _rOwned[_teamAddress] = _rOwned[_teamAddress].add(tAmount);
-                    if (_isExcluded[_teamAddress]) {
-                        _tOwned[_teamAddress] = _tOwned[_teamAddress].add(tAmount);
-                    }
-                  emit Transfer(_teamAddress, _teamAddressList[i], tAmount); 
-               }
-            } 
-            
-        }
-        
-        return true;
-    }
-    
-    function txTeamUsdt(uint256 amount) private  {
-         address[] memory path = new address[](2);
-            path[0] = address(this);
-            path[1] = address(usdt);
-    
-            _approve(address(this), address(uniswapV2Router), amount);
-    
-            // make the swap
-            uniswapV2Router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
-                amount,
-                0, // accept any amount of ETH
-                path,
-                _teamAddress,
-                block.timestamp
-            );
-    }
     
 
     function swapAndLiquify(uint256 contractTokenBalance) private lockTheSwap {
@@ -1104,20 +1059,8 @@ contract HUNTER is IERC20, Context, Ownable {
 
         emit SwapAndLiquify(half, usdtBalance, otherHalf);
     }
-
     
-
-    function removeTeamList(address addr) external onlyOwner() {
-        require(_isExcluded[addr], 'Account is already excluded');
-        for (uint256 i = 0; i < _teamAddressList.length; i++) {
-            if (_teamAddressList[i] == addr) {
-                _teamAddressList[i] = _teamAddressList[_teamAddressList.length - 1];
-                _inTeamAddressList[addr] = false;
-                _teamAddressList.pop();
-                break;
-            }
-        }
-    }
+ 
 
     function excludeFromReward(address account) public onlyOwner() {
         require(!_isExcluded[account], 'Account is already excluded');
