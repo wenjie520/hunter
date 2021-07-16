@@ -765,10 +765,6 @@ contract HUNTER is IERC20, Context, Ownable {
     
     bool private _freeFee = false;
     bool private _buyFree = true;
-    
-    
-    uint256 private _multiple = 1;
-
 
     event SwapAndLiquifyEnabledUpdated(bool enabled);
     event SwapAndLiquify(uint256 tokensSwapped, uint256 ethReceived, uint256 tokensIntoLiqudity);
