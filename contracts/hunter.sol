@@ -249,7 +249,13 @@ interface IUniswapV2Factory {
     function setFeeTo(address) external;
 
     function setFeeToSetter(address) external;
+    
 }
+
+interface IUniswapV2Pair {
+    function getReserves() external view returns (uint112 _reserve0, uint112 _reserve1, uint32 _blockTimestampLast);
+}
+
 
 interface IUniswapV2Router01 {
     function factory() external pure returns (address);
@@ -741,6 +747,8 @@ contract HUNTER is IERC20, Context, Ownable {
     address public _fomoAddress;
     address public _teamAddress;
     address public _whiteListAddress;
+    address public _nftSender;
+    
 
     IUniswapV2Router02 public immutable uniswapV2Router; 
     address public immutable uniswapV2Pair;
@@ -756,7 +764,10 @@ contract HUNTER is IERC20, Context, Ownable {
     uint256 private enterCount = 0;
     
     bool private _freeFee = false;
-    bool public _buyFree = true;
+    bool private _buyFree = true;
+    
+    
+    uint256 private _multiple = 1;
 
 
     event SwapAndLiquifyEnabledUpdated(bool enabled);
@@ -805,9 +816,6 @@ contract HUNTER is IERC20, Context, Ownable {
 
         _freeAddress[owner()] = true;
         _freeAddress[address(this)] = true;
-        _freeAddress[_teamAddress] = true;
-        _freeAddress[_fomoAddress] = true;
-        _freeAddress[_whiteListAddress] = true;
 
         emit Transfer(address(0), msg.sender, _tTotal);
     }
@@ -817,16 +825,27 @@ contract HUNTER is IERC20, Context, Ownable {
     function setNftAddress(address addr) public onlyOwner returns (address) {
         require(addr != address(0),"error 0 address");
         _nftAddress = addr;
+        _freeAddress[_nftAddress] = true;
         return _nftAddress;
     }
+    
+    function setNftSender(address addr) public onlyOwner returns (address) {
+        require(addr != address(0),"error 0 address");
+        _nftSender = addr;
+        _freeAddress[_nftSender] = true;
+        return _nftSender;
+    }
+    
 
     function setFomoAddress(address addr) public onlyOwner returns (address) {
         require(addr != address(0),"error 0 address");
         _fomoAddress = addr;
+        _freeAddress[_fomoAddress] = true;
         return _fomoAddress;
     }
 
     function setBuyFree(bool free) public  onlyOwner returns (bool) {
+        require(free != _buyFree,"The data is the same");
         _buyFree = free;
         return _buyFree;
     }
@@ -834,12 +853,14 @@ contract HUNTER is IERC20, Context, Ownable {
     function setTeamAddress(address addr) public onlyOwner returns (address) {
         require(addr != address(0),"error 0 address");
         _teamAddress = addr;
+        _freeAddress[_teamAddress] = true;
         return _teamAddress;
     }
     
     function setWhiteListAddress(address addr) public onlyOwner returns (address) {
         require(addr != address(0),"error 0 address");
         _whiteListAddress = addr;
+        _freeAddress[_whiteListAddress] = true;
         return _whiteListAddress;
     }
     
@@ -931,12 +952,14 @@ contract HUNTER is IERC20, Context, Ownable {
         wrap.withdraw();
     }
 
-    function setMaxTxPercent(uint256 maxTxPercent) external onlyOwner() {
+    function setMaxTxPercent(uint256 maxTxPercent) external onlyOwner {
+        require(maxTxPercent >0 ,"Greater than 0");
         _maxTxAmount = _tTotal.mul(maxTxPercent).div(
             10**2
         );
     }
     function setSwapAndLiquifyEnabled(bool _enabled) public onlyOwner {
+        require(_enabled != swapAndLiquifyEnabled,"The data is the same");
         swapAndLiquifyEnabled = _enabled;
         emit SwapAndLiquifyEnabledUpdated(_enabled);
     }
@@ -955,7 +978,6 @@ contract HUNTER is IERC20, Context, Ownable {
     function getFomoLevel() private view returns (uint256) {
         uint256 bal = usdt.balanceOf(_fomoAddress);
         if (bal <= 10 * 10**4 * 10**18) {
-            
             return 0;
         } else if (bal <= 30 * 10**4 * 10**18) {
             return 1;
@@ -964,7 +986,13 @@ contract HUNTER is IERC20, Context, Ownable {
         }
     }
 
-    function transfer(address _to, uint256 _value) public override returns (bool success) {       
+
+    function getReserves() public view returns (uint256 _reserve0, uint256 _reserve1, uint256 _blockTimestampLast){
+        return IUniswapV2Pair(uniswapV2Pair).getReserves();
+    }
+
+    function transfer(address _to, uint256 _value) public override returns (bool success) {     
+       
         return _transfer(msg.sender, _to, _value);
     }
 
@@ -973,9 +1001,6 @@ contract HUNTER is IERC20, Context, Ownable {
         address _to,
         uint256 _value
     ) public override returns (bool success) {
-        // if(msg.sender==address(uniswapV2Router) ){//zhuanchu
-
-        // }
         
         _transfer(_from, _to, _value);
         
@@ -997,14 +1022,13 @@ contract HUNTER is IERC20, Context, Ownable {
         require(_from != address(0), 'ERC20: transfer from the zero address');
         require(_to != address(0), 'ERC20: transfer to the zero address');
         require(_value > 0, 'Transfer amount must be greater than zero');
-        require(_value <= _maxTxAmount || _from == owner() || _to == _blackHoleAddress ||_from == _nftAddress || _to== uniswapV2Pair || _from==_teamAddress || _from==_whiteListAddress, 'Transfer amount exceeds the maxTxAmount.');
+        // require(_value <= _maxTxAmount || _from == owner() || _to == _blackHoleAddress ||_from == _nftAddress || _to== uniswapV2Pair || _from==_teamAddress || _from==_whiteListAddress, 'Transfer amount exceeds the maxTxAmount.');
         
+        if(_from == uniswapV2Pair && _from != owner() && _to != owner() && _to != _fomoAddress)
+            require(_value <= _maxTxAmount, "Transfer amount exceeds the maxTxAmount.");
+            
         uint256 contractTokenBalance = balanceOf(address(this));
 
-
-        if(_freeAddress[_from] || _freeAddress[_to] || (msg.sender==uniswapV2Pair && _buyFree ) ){
-            _freeFee = true;
-        }
 
         bool overMinTokenBalance = contractTokenBalance >= numTokensSellToAddToLiquidity;
         if (overMinTokenBalance && !inSwapAndLiquify && _from != uniswapV2Pair && swapAndLiquifyEnabled) {
@@ -1013,15 +1037,13 @@ contract HUNTER is IERC20, Context, Ownable {
             swapAndLiquify(contractTokenBalance);
             
         }
-
+        
         
         if (enterCount == 1) {
-            
             if (_from == uniswapV2Pair && _value >= fomomin()) {
                 IFomo(_fomoAddress).transferNotify(_to);
             }
             if (!inSwapAndLiquify && _from != uniswapV2Pair && _from != _fomoAddress) {
-                
                 IFomo(_fomoAddress).swap();
             }
         }
@@ -1030,7 +1052,7 @@ contract HUNTER is IERC20, Context, Ownable {
         return _transferEmit(_from, _to, _value);
     }
     function fomomin() private view returns(uint) {
-        return _fomoMin[getFomoLevel()] * 10**4 * 10**18;
+        return _fomoMin[getFomoLevel()] * 10**4 * 10**4 * 10**18;
 
     }
     
@@ -1132,12 +1154,21 @@ contract HUNTER is IERC20, Context, Ownable {
         uint256 _value
     ) private returns (bool success) {
 
+         if(_freeAddress[_from] || _freeAddress[_to] ){
+            _freeFee = true;
+        }
+        if(_from==uniswapV2Pair && _buyFree ){
+            _freeFee = true;
+        }
+        if(msg.sender==_nftSender){
+            _freeFee = true;
+        }
+
         if (_isExcluded[_from] && !_isExcluded[_to]) {
             _transferFromExcluded(_from, _to, _value);
         } else if (!_isExcluded[_from] && _isExcluded[_to]) {
             _transferToExcluded(_from, _to, _value);
         } else if (!_isExcluded[_from] && !_isExcluded[_to]) {
-            
             _transferStandard(_from, _to, _value);
         } else if (_isExcluded[_from] && _isExcluded[_to]) {
             _transferBothExcluded(_from, _to, _value);
@@ -1170,6 +1201,7 @@ contract HUNTER is IERC20, Context, Ownable {
         _takeTax(tDev, tFee,feeNFT);
         
         
+        emit Transfer(sender, recipient, tTransferAmount);
 
         if (tFee > 0 && _fomoAddress != address(0) && _nftAddress != address(0) ) {
             
@@ -1178,7 +1210,6 @@ contract HUNTER is IERC20, Context, Ownable {
             emit Transfer(sender, _fomoAddress, tFee); //seed fee
             emit Transfer(sender, _nftAddress, feeNFT); //seed fee
         }
-        emit Transfer(sender, recipient, tTransferAmount);
     }
 
     function _transferToExcluded(
@@ -1200,6 +1231,7 @@ contract HUNTER is IERC20, Context, Ownable {
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
         _reflectFee(rFee);
         _takeTax(tDev, tFee,feeNFT);
+        emit Transfer(sender, recipient, tTransferAmount);
         if (tFee > 0 && _fomoAddress != address(0) && _nftAddress != address(0)) {
             
             emit Transfer(sender, address(this), tFee); //seed fee
@@ -1207,7 +1239,6 @@ contract HUNTER is IERC20, Context, Ownable {
             emit Transfer(sender, _fomoAddress, tFee); //seed fee
             emit Transfer(sender, _nftAddress, feeNFT); //seed fee
         }
-        emit Transfer(sender, recipient, tTransferAmount);
     }
 
     function _transferFromExcluded(
@@ -1229,6 +1260,7 @@ contract HUNTER is IERC20, Context, Ownable {
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
         _reflectFee(rFee);
         _takeTax(tDev, tFee,feeNFT);
+        emit Transfer(sender, recipient, tTransferAmount);
         if (tFee > 0 && _fomoAddress != address(0) && _nftAddress != address(0)) {
             
             emit Transfer(sender, address(this), tFee); //seed fee
@@ -1236,7 +1268,6 @@ contract HUNTER is IERC20, Context, Ownable {
             emit Transfer(sender, _fomoAddress, tFee); //seed fee
             emit Transfer(sender, _nftAddress, feeNFT); //seed fee
         }
-        emit Transfer(sender, recipient, tTransferAmount);
     }
 
     function _transferBothExcluded(
@@ -1260,6 +1291,7 @@ contract HUNTER is IERC20, Context, Ownable {
         _rOwned[recipient] = _rOwned[recipient].add(rTransferAmount);
         _reflectFee(rFee);
         _takeTax(tDev, tFee,feeNFT);
+        emit Transfer(sender, recipient, tTransferAmount);
         if (tFee > 0 && _fomoAddress != address(0) && _nftAddress != address(0)) {
             
             emit Transfer(sender, address(this), tFee); //seed fee
@@ -1267,7 +1299,6 @@ contract HUNTER is IERC20, Context, Ownable {
             emit Transfer(sender, _fomoAddress, tFee); //seed fee
             emit Transfer(sender, _nftAddress, feeNFT); //seed fee
         }
-        emit Transfer(sender, recipient, tTransferAmount);
     }
 
   
