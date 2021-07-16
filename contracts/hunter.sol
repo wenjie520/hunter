@@ -754,7 +754,7 @@ contract HUNTER is IERC20, Context, Ownable {
     address public immutable uniswapV2Pair;
 
     uint256[3] private _ratioFee = [6, 4, 2];
-    uint256[3] private _ratioNFT = [15, 10, 5];
+    uint256[3] private _ratioNFT = [10, 10, 5];
     uint256[3] private _fomoMin = [10, 5, 1];
 
     bool inSwapAndLiquify;
