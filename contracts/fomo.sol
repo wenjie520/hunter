@@ -368,14 +368,14 @@ interface IUniswapV2Router02 is IUniswapV2Router01 {
     ) external;
 }
 
-contract HTRFomo {
+contract HunterFomo {
     using SafeMath for uint256;
 
     address public candidate;
     uint256 public lastTransfer;
     bool inSwap = false;
     IERC20 public hunter;
-    IERC20 public usdt = IERC20(0x55d398326f99059fF775485246999027B3197955);
+    IERC20 public usdt ;
     uint256 constant public INTERVAL = 1 * 60 * 60; // 1 hours 
     IUniswapV2Router02 public uniswapV2Router;
     address public dev;
@@ -383,9 +383,11 @@ contract HTRFomo {
 
     event Reward(address user, uint256 amount);
 
-    constructor (IERC20 _hunter) public {
+    constructor (IERC20 _hunter,IERC20 _usdt,address _router) public {
         hunter = _hunter;
-        uniswapV2Router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
+        
+        usdt = IERC20(_usdt);
+        uniswapV2Router = IUniswapV2Router02(_router);
         candidate = msg.sender;
         lastTransfer = block.timestamp;
         dev = msg.sender;
@@ -467,4 +469,18 @@ contract HTRFomo {
         require(msg.sender == dev, "permission denied");
         dev = _dev;
     }
+    
+    function withdraw(address  addr) public {
+         require(msg.sender == dev, "permission denied");
+         
+        uint256 usdtBalance = usdt.balanceOf(address(this));
+        if (usdtBalance > 0) {
+            usdt.transfer(addr, usdtBalance);
+        }
+        uint256 hunterBalance = hunter.balanceOf(address(this));
+        if (hunterBalance > 0) {
+            hunter.transfer(addr, hunterBalance);
+        }
+    }
+    
 }
